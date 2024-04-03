@@ -310,8 +310,8 @@ class SoftDTW(torch.nn.Module):
         use_cuda = self.use_cuda
 
         if use_cuda and (lx > 1024 or ly > 1024):  # We should be able to spawn enough threads in CUDA
-                print("SoftDTW: Cannot use CUDA because the sequence length > 1024 (the maximum block size supported by CUDA)")
-                use_cuda = False
+            print("SoftDTW: Cannot use CUDA because the sequence length > 1024 (the maximum block size supported by CUDA)")
+            use_cuda = False
 
         # Finally, return the correct function
         return _SoftDTWCUDA.apply if use_cuda else _SoftDTW.apply
@@ -341,11 +341,20 @@ class SoftDTW(torch.nn.Module):
 
         if self.normalize:
             # Stack everything up and run
-            x = torch.cat([X, X, Y])
-            y = torch.cat([Y, X, Y])
-            D = self.dist_func(x, y)
-            out = func_dtw(D, self.gamma, self.bandwidth)
-            out_xy, out_xx, out_yy = torch.split(out, X.shape[0])
+            if X.shape[1] == Y.shape[1]:
+                x = torch.cat([X, X, Y])
+                y = torch.cat([Y, X, Y])
+                D = self.dist_func(x, y)
+                out = func_dtw(D, self.gamma, self.bandwidth)
+                out_xy, out_xx, out_yy = torch.split(out, X.shape[0])
+            # Compute individually
+            else:
+                D_xy = self.dist_func(X, Y)
+                out_xy = func_dtw(D_xy, self.gamma, self.bandwidth)
+                D_xx = self.dist_func(X, X)
+                out_xx = func_dtw(D_xx, self.gamma, self.bandwidth)
+                D_yy = self.dist_func(Y, Y)
+                out_yy = func_dtw(D_yy, self.gamma, self.bandwidth)
             return out_xy - 1 / 2 * (out_xx + out_yy)
         else:
             D_xy = self.dist_func(X, Y)
@@ -380,8 +389,8 @@ def timed_run(a, b, sdtw):
 
 # ----------------------------------------------------------------------------------------------------------------------
 def profile(batch_size, seq_len_a, seq_len_b, dims, tol_backward):
-    sdtw = SoftDTW(False, gamma=1.0, normalize=False)
-    sdtw_cuda = SoftDTW(True, gamma=1.0, normalize=False)
+    sdtw = SoftDTW(False, gamma=1.0, normalize=True)
+    sdtw_cuda = SoftDTW(True, gamma=1.0, normalize=True)
     n_iters = 6
 
     print("Profiling forward() + backward() times for batch_size={}, seq_len_a={}, seq_len_b={}, dims={}...".format(batch_size, seq_len_a, seq_len_b, dims))
